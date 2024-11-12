@@ -1007,6 +1007,13 @@ static int i2c_hid_core_resume(struct i2c_hid *ihid)
 		mutex_unlock(&ihid->reset_lock);
 	} else {
 		ret = i2c_hid_set_power(ihid, I2C_HID_PWR_ON);
+
+		/* Weida Hi-Tech devices can timeout during the power-on
+		 * command even though the probe above was acknowledged. In
+		 * this case, a second power-on command does the trick.
+		 */
+		if (ret < 0)
+			ret = i2c_hid_set_power(ihid, I2C_HID_PWR_ON);
 	}
 
 	if (ret)
