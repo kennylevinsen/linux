@@ -143,6 +143,8 @@ static const struct i2c_hid_quirks {
 		 I2C_HID_QUIRK_BOGUS_IRQ },
 	{ I2C_VENDOR_ID_GOODIX, I2C_DEVICE_ID_GOODIX_0D42,
 		 I2C_HID_QUIRK_DELAY_WAKEUP_AFTER_RESUME },
+	{ USB_VENDOR_ID_WEIDA, HID_ANY_ID,
+		 I2C_HID_QUIRK_DELAY_WAKEUP_AFTER_RESUME },
 	{ 0, 0 }
 };
 
@@ -987,6 +989,9 @@ static int i2c_hid_core_resume(struct i2c_hid *ihid)
 	/* On Goodix 27c6:0d42 wait extra time before device wakeup.
 	 * It's not clear why but if we send wakeup too early, the device will
 	 * never trigger input interrupts.
+	 *
+	 * This is also used to give Weida devices more time to wake up, as
+	 * they otherwise fail the upcoming power command with a timeout.
 	 */
 	if (ihid->quirks & I2C_HID_QUIRK_DELAY_WAKEUP_AFTER_RESUME)
 		msleep(1500);
