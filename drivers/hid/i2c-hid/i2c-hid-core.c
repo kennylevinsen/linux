@@ -1012,12 +1012,17 @@ static int i2c_hid_core_resume(struct i2c_hid *ihid)
 		 * command even though the probe above was acknowledged. In
 		 * this case, a second power-on command does the trick.
 		 */
-		if (ret < 0)
+		if (ret < 0) {
+			dev_err(&ihid->client->dev,
+				"failed to change power setting, retrying once.\n");
 			ret = i2c_hid_set_power(ihid, I2C_HID_PWR_ON);
+		}
 	}
 
-	if (ret)
+	if (ret) {
+		dev_err(&ihid->client->dev, "resume failed.\n");
 		return ret;
+	}
 
 	return hid_driver_reset_resume(hid);
 }
