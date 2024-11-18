@@ -408,14 +408,14 @@ static int i2c_hid_set_power_command(struct i2c_hid *ihid, int power_state)
 	return i2c_hid_xfer(ihid, ihid->cmdbuf, length, NULL, 0);
 }
 
-static int i2c_hid_set_power(struct i2c_hid *ihid, int power_state)
+static int i2c_hid_set_power(struct i2c_hid *ihid, int power_state, bool fail)
 {
 	int ret;
 
 	i2c_hid_dbg(ihid, "%s\n", __func__);
 
 	ret = i2c_hid_set_power_command(ihid, power_state);
-	if (ret)
+	if (ret || fail)
 		dev_err(&ihid->client->dev,
 			"failed to change power setting.\n");
 
@@ -431,7 +431,12 @@ static int i2c_hid_set_power(struct i2c_hid *ihid, int power_state)
 	if (!ret && power_state == I2C_HID_PWR_ON)
 		msleep(60);
 
-	return ret;
+	if (ret)
+		return ret;
+
+	if (fail)
+		return -1;
+	return 0;
 }
 
 static int i2c_hid_start_hwreset(struct i2c_hid *ihid)
@@ -448,7 +453,7 @@ static int i2c_hid_start_hwreset(struct i2c_hid *ihid)
 	 */
 	lockdep_assert_held(&ihid->reset_lock);
 
-	ret = i2c_hid_set_power(ihid, I2C_HID_PWR_ON);
+	ret = i2c_hid_set_power(ihid, I2C_HID_PWR_ON, false);
 	if (ret)
 		return ret;
 
@@ -474,7 +479,7 @@ static int i2c_hid_start_hwreset(struct i2c_hid *ihid)
 
 	/* Clean up if sending reset command failed */
 	clear_bit(I2C_HID_RESET_PENDING, &ihid->flags);
-	i2c_hid_set_power(ihid, I2C_HID_PWR_SLEEP);
+	i2c_hid_set_power(ihid, I2C_HID_PWR_SLEEP, false);
 	return ret;
 }
 
@@ -497,7 +502,7 @@ static int i2c_hid_finish_hwreset(struct i2c_hid *ihid)
 
 	/* At least some SIS devices need this after reset */
 	if (!(ihid->quirks & I2C_HID_QUIRK_NO_WAKEUP_AFTER_RESET))
-		ret = i2c_hid_set_power(ihid, I2C_HID_PWR_ON);
+		ret = i2c_hid_set_power(ihid, I2C_HID_PWR_ON, false);
 
 	return ret;
 }
@@ -955,7 +960,7 @@ static int i2c_hid_core_suspend(struct i2c_hid *ihid, bool force_poweroff)
 
 	/* Save some power */
 	if (!(ihid->quirks & I2C_HID_QUIRK_NO_SLEEP_ON_SUSPEND))
-		i2c_hid_set_power(ihid, I2C_HID_PWR_SLEEP);
+		i2c_hid_set_power(ihid, I2C_HID_PWR_SLEEP, false);
 
 	disable_irq(client->irq);
 
@@ -1006,7 +1011,7 @@ static int i2c_hid_core_resume(struct i2c_hid *ihid)
 			ret = i2c_hid_finish_hwreset(ihid);
 		mutex_unlock(&ihid->reset_lock);
 	} else {
-		ret = i2c_hid_set_power(ihid, I2C_HID_PWR_ON);
+		ret = i2c_hid_set_power(ihid, I2C_HID_PWR_ON, true);
 
 		/* Weida Hi-Tech devices can timeout during the power-on
 		 * command even though the probe above was acknowledged. In
@@ -1015,7 +1020,7 @@ static int i2c_hid_core_resume(struct i2c_hid *ihid)
 		if (ret < 0) {
 			dev_err(&ihid->client->dev,
 				"failed to change power setting, retrying once.\n");
-			ret = i2c_hid_set_power(ihid, I2C_HID_PWR_ON);
+			ret = i2c_hid_set_power(ihid, I2C_HID_PWR_ON, false);
 		}
 	}
 
@@ -1329,7 +1334,7 @@ void i2c_hid_core_shutdown(struct i2c_client *client)
 {
 	struct i2c_hid *ihid = i2c_get_clientdata(client);
 
-	i2c_hid_set_power(ihid, I2C_HID_PWR_SLEEP);
+	i2c_hid_set_power(ihid, I2C_HID_PWR_SLEEP, false);
 	free_irq(client->irq, ihid);
 
 	i2c_hid_core_shutdown_tail(ihid);
