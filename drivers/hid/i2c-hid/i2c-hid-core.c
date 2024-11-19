@@ -1030,7 +1030,7 @@ static int i2c_hid_core_resume(struct i2c_hid *ihid)
 			 * This patch is incomplete - we try 10 times to figure
 			 * out how long the bus is busy.
 			 */
-			while (ret == -ETIMEDOUT && tries--) {
+			while (tries--) {
 				dev_err(&ihid->client->dev,
 					"power on after resume timed out, retrying %d more times\n",
 					tries);
