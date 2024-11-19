@@ -51,6 +51,7 @@
 #define I2C_HID_QUIRK_NO_WAKEUP_AFTER_RESET	BIT(4)
 #define I2C_HID_QUIRK_NO_SLEEP_ON_SUSPEND	BIT(5)
 #define I2C_HID_QUIRK_DELAY_WAKEUP_AFTER_RESUME BIT(6)
+#define I2C_HID_QUIRK_WEIDA_RESUME_BROKEN       BIT(7)
 
 /* Command opcodes */
 #define I2C_HID_OPCODE_RESET			0x01
@@ -143,6 +144,8 @@ static const struct i2c_hid_quirks {
 		 I2C_HID_QUIRK_BOGUS_IRQ },
 	{ I2C_VENDOR_ID_GOODIX, I2C_DEVICE_ID_GOODIX_0D42,
 		 I2C_HID_QUIRK_DELAY_WAKEUP_AFTER_RESUME },
+	{ USB_VENDOR_ID_WEIDA, HID_ANY_ID,
+		 I2C_HID_QUIRK_WEIDA_RESUME_BROKEN },
 	{ 0, 0 }
 };
 
@@ -969,6 +972,7 @@ static int i2c_hid_core_resume(struct i2c_hid *ihid)
 {
 	struct i2c_client *client = ihid->client;
 	struct hid_device *hid = ihid->hid;
+	int tries = 10;
 	int ret;
 
 	if (!device_may_wakeup(&client->dev))
@@ -1007,7 +1011,25 @@ static int i2c_hid_core_resume(struct i2c_hid *ihid)
 		mutex_unlock(&ihid->reset_lock);
 	} else {
 		ret = i2c_hid_set_power(ihid, I2C_HID_PWR_ON);
+
+		if (ihid->quirks & I2C_HID_QUIRK_WEIDA_RESUME_BROKEN) {
+			/* Weida Hi-Tech devices can timeout during the power-on
+			 * command even though the probe above was acknowledged. In
+			 * this case, a second power-on command does the trick.
+			 *
+			 * This patch is incomplete - we try 10 times to figure
+			 * out how long the bus is busy.
+			 */
+			while (ret == -ETIMEDOUT && tries--) {
+				dev_err(&ihid->client->dev,
+					"power on after resume timed out, retrying %d more times\n",
+					tries);
+				ret = i2c_hid_set_power(ihid, I2C_HID_PWR_ON);
+			}
+		}
 	}
+
+	dev_info(&ihid->client->dev, "resume status: %d\n", ret);
 
 	if (ret)
 		return ret;
@@ -1049,6 +1071,10 @@ static int __i2c_hid_core_probe(struct i2c_hid *ihid)
 	strscpy(hid->phys, dev_name(&client->dev), sizeof(hid->phys));
 
 	ihid->quirks = i2c_hid_lookup_quirk(hid->vendor, hid->product);
+
+	if (ihid->quirks & I2C_HID_QUIRK_WEIDA_RESUME_BROKEN) {
+		dev_warn(&client->dev, "Weida bug workaround active");
+	}
 
 	return 0;
 }
