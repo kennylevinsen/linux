@@ -980,12 +980,16 @@ static int i2c_hid_core_resume(struct i2c_hid *ihid)
 
 	enable_irq(client->irq);
 
-	/* Make sure the device is awake on the bus */
-	ret = i2c_hid_probe_address(ihid);
-	if (ret < 0) {
-		dev_err(&client->dev, "nothing at address after resume: %d\n",
-			ret);
-		return -ENXIO;
+	if (!(ihid->quirks & I2C_HID_QUIRK_WEIDA_RESUME_BROKEN)) {
+		/* Make sure the device is awake on the bus */
+		ret = i2c_hid_probe_address(ihid);
+		if (ret < 0) {
+			dev_err(&client->dev, "nothing at address after resume: %d\n",
+				ret);
+			return -ENXIO;
+		}
+	} else {
+		dev_warn(&client->dev, "Skipping initial probe for weida");
 	}
 
 	/* On Goodix 27c6:0d42 wait extra time before device wakeup.
